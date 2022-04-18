@@ -13,7 +13,12 @@ export default () => ({
     "utf8"
   ),
   accessTokenAliveTime:
-    Number(process.env.ACCESS_TOKEN_ALIVE_TIME_MINUTES) || 15,
-  cookieAliveTime: Number(process.env.COOKIE_ALIVE_TIME_DAYS) || 60,
+    (Number(process.env.ACCESS_TOKEN_ALIVE_TIME_MINUTES) || 15) * 60 * 1000,
+  refreshTokenAliveTime:
+    (Number(process.env.REFRESH_TOKEN_ALIVE_TIME_DAYS) || 60) *
+    24 *
+    60 *
+    60 *
+    1000,
   maxSessionsPerAcc: Number(process.env.MAX_SESSIONS_PER_ACC) || 5,
 });

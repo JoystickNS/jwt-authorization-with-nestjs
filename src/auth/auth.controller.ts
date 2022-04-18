@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  Get,
   Post,
   Put,
   Req,
@@ -10,9 +11,10 @@ import {
 } from "@nestjs/common";
 import { Response } from "express";
 import { CreateUserDto } from "src/users/dto/create-user.dto";
-import { AppRequest } from "../interfaces/app-request";
+import { AppRequest } from "../interfaces/app-request.interface";
 import { AuthService } from "./auth.service";
 import { withoutAuthKey } from "./decorators/without-auth-key.decorator";
+import { LoginDto } from "./dto/login.dto";
 import { LocalAuthGuard } from "./guards/local-auth.guard";
 
 @Controller("auth")
@@ -26,11 +28,7 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
     @Body() createUserDto: CreateUserDto
   ) {
-    const newUser = await this.authService.registration(req, createUserDto);
-
-    this.authService.setCookie(res, newUser.refreshToken);
-
-    return newUser;
+    return this.authService.registration(req, res, createUserDto);
   }
 
   @Post("login")
@@ -38,13 +36,16 @@ export class AuthController {
   @UseGuards(LocalAuthGuard)
   async login(
     @Req() req: AppRequest,
-    @Res({ passthrough: true }) res: Response
+    @Res({ passthrough: true }) res: Response,
+    @Body() loginDto: LoginDto
   ) {
-    const user = await this.authService.login(req);
+    return this.authService.login(req, res, loginDto);
+  }
 
-    this.authService.setCookie(res, user.refreshToken);
-
-    return user;
+  @Get("me")
+  @withoutAuthKey()
+  async me(@Req() req: AppRequest) {
+    return this.authService.me(req.cookies["refreshToken"]);
   }
 
   @Put("refresh")
@@ -53,23 +54,14 @@ export class AuthController {
     @Req() req: AppRequest,
     @Res({ passthrough: true }) res: Response
   ) {
-    const tokens = await this.authService.refresh(req);
-
-    this.authService.setCookie(res, tokens.refreshToken);
-
-    return tokens;
+    return this.authService.refresh(req, res);
   }
 
   @Delete("logout")
-  @withoutAuthKey()
   async logout(
     @Req() req: AppRequest,
     @Res({ passthrough: true }) res: Response
   ) {
-    const token = await this.authService.logout(req.cookies["refreshToken"]);
-
-    res.clearCookie("refreshToken");
-
-    return token;
+    return this.authService.logout(req, res);
   }
 }

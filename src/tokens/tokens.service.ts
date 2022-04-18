@@ -18,12 +18,12 @@ export class TokensService {
     payload = { ...payload };
     return {
       accessToken: this.jwtService.sign(payload, {
-        expiresIn: `${this.configService.get("accessTokenAliveTime")}m`,
+        expiresIn: `${this.configService.get("accessTokenAliveTime")}ms`,
         privateKey: this.configService.get("privateKey"),
         algorithm: "RS256",
       }),
       refreshToken: this.jwtService.sign(payload, {
-        expiresIn: `${this.configService.get("cookieAliveTime")}d`,
+        expiresIn: `${this.configService.get("refreshTokenAliveTime")}ms`,
         privateKey: this.configService.get("privateKey"),
         algorithm: "RS256",
       }),
