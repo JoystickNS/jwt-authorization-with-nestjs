@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
+import { Cron, CronExpression } from "@nestjs/schedule";
 import { PrismaService } from "src/prisma/prisma.service";
 import { JwtPayload } from "../classes/jwt-payload";
 import { CreateTokenDto } from "./dto/create-token.dto";
@@ -50,13 +51,13 @@ export class TokensService {
   }
 
   async updateFirstByUserId(userId: number, updateTokenDto: UpdateTokenDto) {
-    const firstSession = await this.prisma.token.findFirst({
+    const firstToken = await this.prisma.token.findFirst({
       where: {
         userId,
       },
     });
 
-    return this.update(firstSession.refreshToken, updateTokenDto);
+    return this.update(firstToken.refreshToken, updateTokenDto);
   }
 
   async delete(refreshToken: string) {
@@ -67,7 +68,7 @@ export class TokensService {
     });
   }
 
-  async find(refreshToken: string) {
+  async getByRefreshToken(refreshToken: string) {
     return this.prisma.token.findUnique({
       where: {
         refreshToken,
@@ -75,11 +76,73 @@ export class TokensService {
     });
   }
 
-  async findAllByUserId(userId: number) {
+  async getAllByUserId(userId: number) {
     return this.prisma.token.findMany({
       where: {
         userId,
+        expires: {
+          not: null,
+        },
       },
     });
+  }
+
+  @Cron(CronExpression.EVERY_WEEKDAY)
+  private async deleteExpiredSessions() {
+    let i = 0;
+
+    while (true) {
+      const records = await this.prisma.token.findMany({
+        skip: i,
+        take: 10000,
+      });
+
+      if (records.length > 0) {
+        i += records.length;
+      } else {
+        break;
+      }
+
+      const dayInMilliseconds = 24 * 60 * 60 * 1000;
+
+      records.forEach((record) => {
+        if (!record.expires) {
+          const isSessionTokenExpired =
+            Date.now() - record.updatedAt.getTime() > dayInMilliseconds;
+
+          if (isSessionTokenExpired) {
+            this.delete(record.refreshToken);
+          }
+        }
+      });
+    }
+  }
+
+  @Cron(CronExpression.EVERY_WEEK)
+  private async deleteExpiredMemorizedTokens() {
+    let i = 0;
+
+    while (true) {
+      const records = await this.prisma.token.findMany({
+        skip: i,
+        take: 10000,
+      });
+
+      if (records.length > 0) {
+        i += records.length;
+      } else {
+        break;
+      }
+
+      records.forEach((record) => {
+        if (record.expires) {
+          const isMemorizedTokenExpired = record.expires.getTime() < Date.now();
+
+          if (isMemorizedTokenExpired) {
+            this.delete(record.refreshToken);
+          }
+        }
+      });
+    }
   }
 }

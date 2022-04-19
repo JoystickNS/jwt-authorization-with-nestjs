@@ -20,5 +20,5 @@ export default () => ({
     60 *
     60 *
     1000,
-  maxSessionsPerAcc: Number(process.env.MAX_SESSIONS_PER_ACC) || 5,
+  maxMemorizedTokens: Number(process.env.MAX_SESSIONS_PER_ACC) || 5,
 });

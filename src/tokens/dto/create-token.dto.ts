@@ -8,9 +8,6 @@ export class CreateTokenDto {
   @IsDate()
   readonly expires?: Date;
 
-  @IsBoolean()
-  readonly rememberMe: boolean;
-
   @IsString()
   readonly userAgent: string;
 

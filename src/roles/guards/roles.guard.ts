@@ -28,7 +28,6 @@ export class RolesGuard implements CanActivate {
     }
 
     const { user } = context.switchToHttp().getRequest();
-
     const userRoles = await this.usersOnRoles.getByUserId(user.id);
 
     if (userRoles) {

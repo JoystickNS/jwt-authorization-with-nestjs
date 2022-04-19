@@ -7,12 +7,13 @@ import { CreateUserDto } from "src/users/dto/create-user.dto";
 import { UsersService } from "src/users/users.service";
 import * as bcrypt from "bcrypt";
 import { TokensService } from "src/tokens/tokens.service";
-import { CookieOptions, Response } from "express";
+import { Response } from "express";
 import { ConfigService } from "@nestjs/config";
 import { JwtPayload } from "../classes/jwt-payload";
 import { AppRequest } from "../interfaces/app-request.interface";
 import { ExceptionMessages } from "../constants/exception-messages";
 import { LoginDto } from "./dto/login.dto";
+import { calcTokenLifeTime, refreshCookieOptions } from "../utils/utils";
 
 @Injectable()
 export class AuthService {
@@ -35,29 +36,32 @@ export class AuthService {
       );
     }
 
-    const hashPassword = await bcrypt.hash(createUserDto.password, 7);
+    const hashedPassword = await bcrypt.hash(createUserDto.password, 7);
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password, ...newUser } = await this.usersService.create({
       ...createUserDto,
-      password: hashPassword,
+      password: hashedPassword,
     });
     const payload = new JwtPayload(newUser);
-    const tokens = this.tokensService.generate(payload);
-
-    await this.tokensService.create({
-      refreshToken: tokens.refreshToken,
-      rememberMe: true,
+    const generatedTokens = this.tokensService.generate(payload);
+    const createdToken = await this.tokensService.create({
+      refreshToken: generatedTokens.refreshToken,
+      expires: calcTokenLifeTime(),
       userAgent: req.headers["user-agent"],
       userId: newUser.id,
     });
 
-    this.setRefreshCookie(res, tokens.refreshToken);
+    this.setRefreshCookie(
+      res,
+      generatedTokens.refreshToken,
+      createdToken.expires
+    );
 
     return {
       user: {
         ...newUser,
       },
-      ...tokens,
+      ...generatedTokens,
     };
   }
 
@@ -66,18 +70,17 @@ export class AuthService {
     const payload = req.user;
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password, ...user } = await this.usersService.getById(payload.id);
-    const tokens = this.tokensService.generate(user);
-    const sessions = await this.tokensService.findAllByUserId(user.id);
+    const generatedTokens = this.tokensService.generate(user);
+    const memorizedTokens = await this.tokensService.getAllByUserId(user.id);
     const tokenOptions = {
-      refreshToken: tokens.refreshToken,
-      expires: loginDto.rememberMe
-        ? new Date(Date.now() + this.configService.get("refreshTokenAliveTime"))
-        : null,
-      rememberMe: loginDto.rememberMe,
+      refreshToken: generatedTokens.refreshToken,
+      expires: loginDto.rememberMe ? calcTokenLifeTime() : null,
       userAgent,
     };
+    const isMaxMemorizedTokens =
+      memorizedTokens.length === this.configService.get("maxMemorizedTokens");
 
-    if (sessions.length < this.configService.get("maxSessionsPerAcc")) {
+    if (!loginDto.rememberMe || !isMaxMemorizedTokens) {
       await this.tokensService.create({
         ...tokenOptions,
         userId: user.id,
@@ -88,13 +91,17 @@ export class AuthService {
       });
     }
 
-    this.setRefreshCookie(res, tokens.refreshToken, loginDto.rememberMe);
+    this.setRefreshCookie(
+      res,
+      generatedTokens.refreshToken,
+      loginDto.rememberMe ? calcTokenLifeTime() : null
+    );
 
     return {
       user: {
         ...user,
       },
-      ...tokens,
+      ...generatedTokens,
     };
   }
 
@@ -103,7 +110,7 @@ export class AuthService {
       throw new UnauthorizedException(ExceptionMessages.Unauthorized);
     }
 
-    const token = await this.tokensService.find(refreshToken);
+    const token = await this.tokensService.getByRefreshToken(refreshToken);
 
     if (token) {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -126,30 +133,26 @@ export class AuthService {
     const userAgent = req.headers["user-agent"];
 
     if (oldRefreshToken) {
-      const session = await this.tokensService.find(oldRefreshToken);
+      const token = await this.tokensService.getByRefreshToken(oldRefreshToken);
 
-      if (session) {
-        const user = await this.usersService.getById(session.userId);
+      if (token) {
+        const user = await this.usersService.getById(token.userId);
         const payload = new JwtPayload(user);
-        const tokens = this.tokensService.generate(payload);
+        const generatedTokens = this.tokensService.generate(payload);
 
         const updatedToken = await this.tokensService.update(oldRefreshToken, {
-          refreshToken: tokens.refreshToken,
-          expires: session.rememberMe
-            ? new Date(
-                Date.now() + this.configService.get("refreshTokenAliveTime")
-              )
-            : null,
+          refreshToken: generatedTokens.refreshToken,
+          expires: token.expires ? calcTokenLifeTime() : null,
           userAgent,
         });
 
         this.setRefreshCookie(
           res,
-          tokens.refreshToken,
-          updatedToken.rememberMe
+          generatedTokens.refreshToken,
+          updatedToken.expires
         );
 
-        return tokens;
+        return generatedTokens;
       }
     }
 
@@ -163,9 +166,9 @@ export class AuthService {
       throw new UnauthorizedException(ExceptionMessages.Unauthorized);
     }
 
-    const session = await this.tokensService.find(refreshToken);
+    const token = await this.tokensService.getByRefreshToken(refreshToken);
 
-    if (session) {
+    if (token) {
       await this.tokensService.delete(refreshToken);
       this.deleteRefreshCookie(res);
       return;
@@ -181,21 +184,19 @@ export class AuthService {
       return null;
     }
 
-    const isPasswordEquals = await bcrypt.compare(password, user.password);
+    const isPasswordsEqual = await bcrypt.compare(password, user.password);
 
-    if (isPasswordEquals) {
+    if (isPasswordsEqual) {
       return new JwtPayload(user);
     }
 
     return null;
   }
 
-  private setRefreshCookie(res: Response, value: string, rememberMe = true) {
+  private setRefreshCookie(res: Response, value: string, expires: Date) {
     res.cookie("refreshToken", value, {
       ...refreshCookieOptions,
-      expires: rememberMe
-        ? new Date(Date.now() + this.configService.get("refreshTokenAliveTime"))
-        : null,
+      expires: expires,
     });
   }
 
@@ -206,9 +207,3 @@ export class AuthService {
     });
   }
 }
-
-const refreshCookieOptions: CookieOptions = {
-  httpOnly: true,
-  sameSite: "lax",
-  path: "auth",
-};
