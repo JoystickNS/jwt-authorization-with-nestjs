@@ -27,7 +27,7 @@ export class AuthService {
     res: Response,
     createUserDto: CreateUserDto
   ) {
-    const user = await this.usersService.getUserByLogin(createUserDto.login);
+    const user = await this.usersService.getByLogin(createUserDto.login);
 
     if (user) {
       throw new BadRequestException(
@@ -37,14 +37,14 @@ export class AuthService {
 
     const hashPassword = await bcrypt.hash(createUserDto.password, 7);
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { password, ...newUser } = await this.usersService.createUser({
+    const { password, ...newUser } = await this.usersService.create({
       ...createUserDto,
       password: hashPassword,
     });
     const payload = new JwtPayload(newUser);
-    const tokens = this.tokensService.generateTokens(payload);
+    const tokens = this.tokensService.generate(payload);
 
-    await this.tokensService.createToken({
+    await this.tokensService.create({
       refreshToken: tokens.refreshToken,
       rememberMe: true,
       userAgent: req.headers["user-agent"],
@@ -65,11 +65,9 @@ export class AuthService {
     const userAgent = req.headers["user-agent"];
     const payload = req.user;
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { password, ...user } = await this.usersService.getUserById(
-      payload.id
-    );
-    const tokens = this.tokensService.generateTokens(user);
-    const sessions = await this.tokensService.findTokensByUserId(user.id);
+    const { password, ...user } = await this.usersService.getById(payload.id);
+    const tokens = this.tokensService.generate(user);
+    const sessions = await this.tokensService.findAllByUserId(user.id);
     const tokenOptions = {
       refreshToken: tokens.refreshToken,
       expires: loginDto.rememberMe
@@ -80,7 +78,7 @@ export class AuthService {
     };
 
     if (sessions.length < this.configService.get("maxSessionsPerAcc")) {
-      await this.tokensService.createToken({
+      await this.tokensService.create({
         ...tokenOptions,
         userId: user.id,
       });
@@ -105,11 +103,11 @@ export class AuthService {
       throw new UnauthorizedException(ExceptionMessages.Unauthorized);
     }
 
-    const token = await this.tokensService.findToken(refreshToken);
+    const token = await this.tokensService.find(refreshToken);
 
     if (token) {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { password, ...user } = await this.usersService.getUserById(
+      const { password, ...user } = await this.usersService.getById(
         token.userId
       );
       return user;
@@ -128,25 +126,22 @@ export class AuthService {
     const userAgent = req.headers["user-agent"];
 
     if (oldRefreshToken) {
-      const session = await this.tokensService.findToken(oldRefreshToken);
+      const session = await this.tokensService.find(oldRefreshToken);
 
       if (session) {
-        const user = await this.usersService.getUserById(session.userId);
+        const user = await this.usersService.getById(session.userId);
         const payload = new JwtPayload(user);
-        const tokens = this.tokensService.generateTokens(payload);
+        const tokens = this.tokensService.generate(payload);
 
-        const updatedToken = await this.tokensService.updateToken(
-          oldRefreshToken,
-          {
-            refreshToken: tokens.refreshToken,
-            expires: session.rememberMe
-              ? new Date(
-                  Date.now() + this.configService.get("refreshTokenAliveTime")
-                )
-              : null,
-            userAgent,
-          }
-        );
+        const updatedToken = await this.tokensService.update(oldRefreshToken, {
+          refreshToken: tokens.refreshToken,
+          expires: session.rememberMe
+            ? new Date(
+                Date.now() + this.configService.get("refreshTokenAliveTime")
+              )
+            : null,
+          userAgent,
+        });
 
         this.setRefreshCookie(
           res,
@@ -168,10 +163,10 @@ export class AuthService {
       throw new UnauthorizedException(ExceptionMessages.Unauthorized);
     }
 
-    const session = await this.tokensService.findToken(refreshToken);
+    const session = await this.tokensService.find(refreshToken);
 
     if (session) {
-      await this.tokensService.deleteToken(refreshToken);
+      await this.tokensService.delete(refreshToken);
       this.deleteRefreshCookie(res);
       return;
     }
@@ -180,7 +175,7 @@ export class AuthService {
   }
 
   async validateUser(login: string, password: string) {
-    const user = await this.usersService.getUserByLogin(login);
+    const user = await this.usersService.getByLogin(login);
 
     if (!user) {
       return null;

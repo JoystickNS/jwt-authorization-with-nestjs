@@ -14,7 +14,7 @@ export class TokensService {
     private configService: ConfigService
   ) {}
 
-  generateTokens(payload: JwtPayload) {
+  generate(payload: JwtPayload) {
     payload = { ...payload };
     return {
       accessToken: this.jwtService.sign(payload, {
@@ -30,7 +30,7 @@ export class TokensService {
     };
   }
 
-  async createToken(createTokenDto: CreateTokenDto) {
+  async create(createTokenDto: CreateTokenDto) {
     return this.prisma.token.create({
       data: {
         ...createTokenDto,
@@ -38,10 +38,10 @@ export class TokensService {
     });
   }
 
-  async updateToken(oldToken: string, updateTokenDto: UpdateTokenDto) {
+  async update(refreshToken: string, updateTokenDto: UpdateTokenDto) {
     return this.prisma.token.update({
       where: {
-        refreshToken: oldToken,
+        refreshToken,
       },
       data: {
         ...updateTokenDto,
@@ -52,14 +52,14 @@ export class TokensService {
   async updateFirstByUserId(userId: number, updateTokenDto: UpdateTokenDto) {
     const firstSession = await this.prisma.token.findFirst({
       where: {
-        userId: userId,
+        userId,
       },
     });
 
-    return this.updateToken(firstSession.refreshToken, updateTokenDto);
+    return this.update(firstSession.refreshToken, updateTokenDto);
   }
 
-  async deleteToken(refreshToken: string) {
+  async delete(refreshToken: string) {
     return this.prisma.token.delete({
       where: {
         refreshToken,
@@ -67,7 +67,7 @@ export class TokensService {
     });
   }
 
-  async findToken(refreshToken: string) {
+  async find(refreshToken: string) {
     return this.prisma.token.findUnique({
       where: {
         refreshToken,
@@ -75,7 +75,7 @@ export class TokensService {
     });
   }
 
-  async findTokensByUserId(userId: number) {
+  async findAllByUserId(userId: number) {
     return this.prisma.token.findMany({
       where: {
         userId,

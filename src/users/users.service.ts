@@ -6,7 +6,7 @@ import { CreateUserDto } from "./dto/create-user.dto";
 export class UsersService {
   constructor(private prisma: PrismaService) {}
 
-  async createUser(createUserDto: CreateUserDto) {
+  async create(createUserDto: CreateUserDto) {
     return this.prisma.user.create({
       data: {
         ...createUserDto,
@@ -14,15 +14,15 @@ export class UsersService {
     });
   }
 
-  async getAllUsers() {
-    return this.prisma.user.findMany();
+  async getById(id: number) {
+    return this.prisma.user.findUnique({
+      where: {
+        id,
+      },
+    });
   }
 
-  async getUserById(id: number) {
-    return this.prisma.user.findUnique({ where: { id } });
-  }
-
-  async getUserByLogin(login: string) {
+  async getByLogin(login: string) {
     return this.prisma.user.findUnique({
       where: {
         login,

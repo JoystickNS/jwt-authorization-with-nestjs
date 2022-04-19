@@ -17,12 +17,12 @@ import { withoutAuthKey } from "./decorators/without-auth-key.decorator";
 import { LoginDto } from "./dto/login.dto";
 import { LocalAuthGuard } from "./guards/local-auth.guard";
 
+@withoutAuthKey()
 @Controller("auth")
 export class AuthController {
   constructor(private authService: AuthService) {}
 
   @Post("registration")
-  @withoutAuthKey()
   async registration(
     @Req() req: AppRequest,
     @Res({ passthrough: true }) res: Response,
@@ -32,7 +32,6 @@ export class AuthController {
   }
 
   @Post("login")
-  @withoutAuthKey()
   @UseGuards(LocalAuthGuard)
   async login(
     @Req() req: AppRequest,
@@ -43,13 +42,11 @@ export class AuthController {
   }
 
   @Get("me")
-  @withoutAuthKey()
   async me(@Req() req: AppRequest) {
     return this.authService.me(req.cookies["refreshToken"]);
   }
 
   @Put("refresh")
-  @withoutAuthKey()
   async refresh(
     @Req() req: AppRequest,
     @Res({ passthrough: true }) res: Response

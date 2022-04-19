@@ -6,7 +6,10 @@ import { APP_GUARD } from "@nestjs/core";
 import { JwtAuthGuard } from "./auth/guards/jwt-auth.guard";
 import { TokensModule } from "./tokens/tokens.module";
 import { ConfigModule } from "@nestjs/config";
+import { RolesModule } from "./roles/roles.module";
+import { UsersOnRolesModule } from "./users-on-roles/users-on-roles.module";
 import configuration from "./config/configuration";
+import { RolesGuard } from "./roles/guards/roles.guard";
 
 @Module({
   imports: [
@@ -19,12 +22,18 @@ import configuration from "./config/configuration";
       isGlobal: true,
       load: [configuration],
     }),
+    RolesModule,
+    UsersOnRolesModule,
   ],
   controllers: [],
   providers: [
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: RolesGuard,
     },
   ],
 })
